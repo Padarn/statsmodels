@@ -186,7 +186,11 @@ class GenericKDE (object):
         See p.9 in socserv.mcmaster.ca/racine/np_faq.pdf
         """
 
-        if isinstance(bw, (np.ndarray, list)):
+        if bw is None:
+            self._bw_method = 'normal_reference'
+        if isinstance(bw, string_types):
+            self._bw_method = bw
+        else: 
             self._bw_method = "user-specified"
             return bw
 
