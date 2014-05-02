@@ -169,18 +169,6 @@ class GenericKDE (object):
         dividing ``nobs`` into as many ``n_sub`` blocks as needed (if
         `randomize` is False).
 
-        Parameters
-        ----------
-        bw: array_like or str
-            If array_like: user-specified bandwidth.
-            If a string this paraneter is ignored,
-
-        Notes
-        -----
-        Currently if the bw parameter is given as a string it is ignored.
-        The 'normal_reference' bandwidth type is returned.
-
-
         References
         ----------
         See p.9 in socserv.mcmaster.ca/racine/np_faq.pdf
