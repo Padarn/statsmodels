@@ -396,15 +396,14 @@ class SemiLinear(KernelReg):
         N_data_predict = np.shape(exog_nonparametric_predict)[0]
         mean = np.empty((N_data_predict,))
         mfx = np.empty((N_data_predict, self.K))
-        Y = self.endog - np.dot(exog_predict, self.b)[:,None]
+        Y = self.endog - np.dot(exog_predict, self.b)[:,None] ## BUG - if exog_predict is not the model exog
         for i in range(N_data_predict):
             mean_mfx = self.func(self.bw, Y, self.exog_nonparametric,
                                  data_predict=exog_nonparametric_predict[i, :])
             mean[i] = mean_mfx[0]
             mfx_c = np.squeeze(mean_mfx[1])
             mfx[i, :] = mfx_c
-        # proposed change to add back in linear effects
-        #mean = mean + np.dot(exog_predict, self.b)
+        mean = mean + np.dot(exog_predict, self.b) # add parametric component
         return mean, mfx
 
     def __repr__(self):
