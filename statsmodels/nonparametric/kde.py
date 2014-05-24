@@ -23,6 +23,7 @@ from statsmodels.tools.decorators import (cache_readonly,
 from . import bandwidths
 from .kdetools import (forrt, revrt, silverman_transform, counts)
 from .linbin import fast_linbin
+import statsmodels.graphics.densityplots as densityplots
 
 #### Kernels Switch for estimators ####
 
@@ -35,7 +36,9 @@ def _checkisfit(self):
     try:
         self.density
     except:
-        raise ValueError("Call fit to fit the density first")
+        # instead of throwing an error, fit with default options
+        self.fit()
+        
 
 
 #### Kernel Density Estimator Class ###
@@ -81,6 +84,7 @@ class KDEUnivariate(object):
 
     def __init__(self, endog):
         self.endog = np.asarray(endog)
+
 
     def fit(self, kernel="gau", bw="scott", fft=True, weights=None,
             gridsize=None, adjust=1, cut=3, clip=(-np.inf, np.inf)):
@@ -515,6 +519,11 @@ class KDEUnivariate(object):
     This function now defers to the ppf_values function.
     """
         return self.ppf_values
+
+    # plot function
+    def plot(self):
+        _checkisfit(self)
+        densityplots.plot_density(self)
 
 class KDE(KDEUnivariate):
     def __init__(self, endog):
