@@ -521,9 +521,23 @@ class KDEUnivariate(object):
         return self.ppf_values
 
     # plot function
-    def plot(self):
+    def plot(self, ptype='pdf', rug=False, ecdf=False, ax=None):
         _checkisfit(self)
-        densityplots.plot_density(self)
+        
+        # plot the base
+        fig = densityplots.plot_density(self, ptype=ptype, ax=ax,
+                                        color='black', linewidth=2,
+                                        label=ptype)
+
+        # add extra detail
+        if rug:
+            densityplots.add_rugplot(self, fig.gca(), color='red',
+                                     label='sample')
+        if ecdf:
+            densityplots.add_ecdf(self, fig.gca(), color='blue',
+                                  label='ecdf', linestyle='--',
+                                  linewidth=2)
+        fig.gca().legend()
 
 class KDE(KDEUnivariate):
     def __init__(self, endog):
