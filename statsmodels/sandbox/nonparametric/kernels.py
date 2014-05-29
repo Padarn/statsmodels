@@ -418,6 +418,34 @@ class Gaussian(CustomKernel):
         """
         return 0.5 * (1 + erf( (x - np.asarray([Xi]).T)/(h * np.sqrt(2) ) ) )
 
+    def kernd(self,x,d):
+        """
+        evaluate d'th derivative
+        """
+        if d == 1:
+            return 0.3989422804014327 * np.exp(-x**2/2.0)*(-x)
+        elif d == 2:
+            return 0.3989422804014327 * np.exp(-x**2/2.0)*(x**2-1)
+        else:
+            return 0*x
+
+    def densityderiv(self, xs, x, d):
+        """Returns the kernel density estimate for point x based on x-values
+        xs
+        """
+        xs = np.asarray(xs)
+        n = len(xs) # before inDomain?
+        xs = self.inDomain( xs, xs, x )[0]
+        if xs.ndim == 1:
+            xs = xs[:,None]
+        if len(xs)>0:
+            h = self.h
+            kd =  self.kernd((xs-x)/h, d)
+            w = 1/h * np.mean(kd, axis=0)
+            return w
+        else:
+            return np.nan
+
 class Cosine(CustomKernel):
     """
     Cosine Kernel
