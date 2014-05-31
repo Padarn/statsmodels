@@ -24,7 +24,6 @@ from statsmodels.tools.decorators import (cache_readonly,
 from . import bandwidths
 from .kdetools import (forrt, revrt, silverman_transform, counts)
 from .linbin import fast_linbin
-import statsmodels.graphics.densityplots as densityplots
 
 #### Kernels Switch for estimators ####
 
@@ -521,10 +520,6 @@ class KDEUnivariate(object):
     """
         return self.ppf_values
 
-    # plot function
-    def plot(self):
-        _checkisfit(self)
-        densityplots.plot_density(self)
 
 class KDE(KDEUnivariate):
     def __init__(self, endog):

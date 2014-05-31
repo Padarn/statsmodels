@@ -48,6 +48,8 @@ def bw_scott(x):
         Visualization.
     """
     A = _select_sigma(x)
+    if A == 0:
+        return 1
     n = len(x)
     return 1.059 * A * n ** -.2
 
@@ -78,6 +80,8 @@ def bw_silverman(x):
     Silverman, B.W. (1986) `Density Estimation.`
     """
     A = _select_sigma(x)
+    if A==0:
+        return 1
     n = len(x)
     return .9 * A * n ** -.2
 

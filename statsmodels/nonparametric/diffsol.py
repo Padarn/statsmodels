@@ -1,6 +1,8 @@
 import numpy
 from matplotlib import pyplot
 import numpy as np
+from profilehooks import timecall
+import scipy.linalg as linalg
 numpy.set_printoptions(precision=3)
 
 
@@ -9,19 +11,19 @@ def diffsol(x_grid, yinitial,pdf,dpdf,ddpdf):
     J = len(x_grid)
     dx = x_grid[1]-x_grid[0]
 
-    T = 0.005
-    N = 500
+    T = 10
+    N = 1000
     dt = float(T)/float(N-1)
     t_grid = numpy.array([n*dt for n in range(N)])
 
     D_u = 0.5
+    epsilon = 0
 
-    f = (dpdf**2)/(pdf**3) - ddpdf/(pdf**2)
-    f_vec = lambda U: f*U
+    f = dt*(2*(dpdf**2)/(pdf**3+epsilon) - ddpdf/(pdf**2+epsilon))
+    v = np.diag(-2*dpdf/(pdf**2+epsilon))
+    d = np.diag(1./(pdf+epsilon))
+    
 
-    v = np.diag(-2*dpdf/(pdf**2))
-    d = np.diag(1./pdf)
-     
     sigma_u = float(D_u*dt)/float(2.*dx*dx)
     rho = float(dt)/float(4*dx)
 
@@ -53,11 +55,8 @@ def diffsol(x_grid, yinitial,pdf,dpdf,ddpdf):
     U_record.append(U)
 
     for ti in range(1,N):
-        f=f*dt
-        U_new = numpy.linalg.solve(1*A_u, 1*B_u.dot(U) + f_vec(U))
-        
+        U_new = numpy.linalg.solve(A_u, B_u.dot(U) + f*U)    
         U = U_new
-        
         U_record.append(U)
 
 
@@ -72,7 +71,146 @@ def diffsol(x_grid, yinitial,pdf,dpdf,ddpdf):
 
     fig, ax = pyplot.subplots()
     
-    ax.plot(x_grid,yinitial, alpha=0.5)
     ax.plot(x_grid,U, linewidth=2)
+    ax.plot(x_grid,pdf)
     
-    pyplot.show()
+    print np.sum(dx*U)
+    print np.sum(dx*pdf)
+
+    return ax
+
+@timecall
+def diffsol_noadvec(x_grid, yinitial,pdf,t, samp, siginv):
+    
+    # step 1 ------------------
+
+    L = x_grid[-1]-x_grid[0]
+    J = len(x_grid)
+    dx = x_grid[1]-x_grid[0]
+
+    T = t
+    N = 1000
+    dt = float(T)/float(N-1)
+    t_grid = numpy.array([n*dt for n in range(N)])
+
+    D_u = 0.5
+    epsilon = 0
+    
+    sigma_u = float(D_u*dt)/float(2.*dx*dx)
+
+
+    U = yinitial
+
+    A1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
+          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
+          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+
+    A3 =  numpy.eye(A1.shape[0])
+
+    A_u = A1*1.0/pdf+A3
+
+    B1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
+          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
+          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+
+    B3 =  numpy.eye(A1.shape[0])
+
+    B_u =  -B1*1.0/pdf+B3
+
+    U_record = []
+
+    U_record.append(U)
+
+
+    LUfact = linalg.lu_factor(A_u)
+
+    for ti in range(1,N):
+        #U_new = numpy.linalg.solve(A_u, B_u.dot(U)) 
+        U_new = linalg.lu_solve(LUfact,B_u.dot(U))
+        U = U_new
+        U_record.append(U)
+
+
+    U_record = numpy.array(U_record)
+
+    U_first = U
+    U_first_record = U_record
+
+    #fig, ax = pyplot.subplots()
+    #pyplot.xlabel('x'); pyplot.ylabel('t')
+    #heatmap = ax.pcolor(x_grid, t_grid, U_record, vmin=0., vmax=1.2)
+    #colorbar = pyplot.colorbar(heatmap)
+    #colorbar.set_label('concentration U')
+    #pyplot.show()
+
+    #fig, ax = pyplot.subplots()
+    
+    #ax.plot(x_grid,U, linewidth=2)
+    #ax.plot(x_grid,pdf)
+    
+    # step 2 -------------------
+
+    lf2 = np.sum(dx*(B1.dot(U_record[-1]/dt-U_record[-2]/dt))**2)
+
+    sign1 = siginv
+
+    tstar =  (sign1/(2*len(samp)*np.sqrt(np.pi)*lf2))**(2.0/5.0)
+
+    # step 3 -------------------
+
+    L = x_grid[-1]-x_grid[0]
+    J = len(x_grid)
+    dx = x_grid[1]-x_grid[0]
+
+    T = 0.03
+    N = 1000
+    dt = float(T)/float(N-1)
+    t_grid = numpy.array([n*dt for n in range(N)])
+
+    D_u = 0.5
+    epsilon = 0
+    
+    sigma_u = float(D_u*dt)/float(2.*dx*dx)
+
+
+    U = yinitial
+
+    A1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
+          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
+          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+
+    A3 =  numpy.eye(A1.shape[0])
+
+    A_u = A1*1.0/pdf+A3
+
+    B1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
+          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
+          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+
+    B3 =  numpy.eye(A1.shape[0])
+
+    B_u =  -B1*1.0/pdf+B3
+
+    U_record = []
+
+    U_record.append(U)
+
+    LUfact = linalg.lu_factor(A_u)
+
+    for ti in range(1,N):
+        #U_new = numpy.linalg.solve(A_u, B_u.dot(U))    
+        U_new = linalg.lu_solve(LUfact,B_u.dot(U))
+        U = U_new
+        U_record.append(U)
+
+
+    fig, ax = pyplot.subplots()
+    
+   
+    ax.plot(x_grid,pdf, linewidth=2, label= 'regular kde')
+    ax.plot(x_grid,U_first, linewidth=2,label='diffusion kde bw' )
+    ax.plot(x_grid,U, linewidth =2, label='diffusion custom bw')
+
+    print 't',t,'tstar',tstar
+
+    return ax
