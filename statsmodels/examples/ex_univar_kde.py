@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
 KDEMultivariate = sm.nonparametric.KDEMultivariate
-
+DiffusionKDE = sm.nonparametric.DiffusionKDE
 
 np.random.seed(123456)
 
@@ -38,15 +38,18 @@ ix = np.argsort(support)
 dens_normal = KDEMultivariate(data=[support], var_type='c', bw='normal_reference')
 dens_cvls = KDEMultivariate(data=[support], var_type='c', bw='cv_ls')
 dens_cvml = KDEMultivariate(data=[support], var_type='c', bw='cv_ml')
+dens_diff = DiffusionKDE(support)
+dens_diff.fit()
 
 plt.figure(1)
 plt.plot(support[ix], rv.pdf(support[ix]), label='Actual')
 plt.plot(support[ix], dens_normal.pdf()[ix], label='Scott')
 plt.plot(support[ix], dens_cvls.pdf()[ix], label='CV_LS')
 plt.plot(support[ix], dens_cvml.pdf()[ix], label='CV_ML')
+plt.plot(dens_diff.support,dens_diff.density, label='Diffusion')
 plt.title("Nonparametric Estimation of the Density of Beta Distributed " \
           "Random Variable")
-plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML'))
+plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML','Diffusion'))
 
 # f distribution
 df = 100
@@ -57,6 +60,8 @@ support = np.random.f(dn, df, size=nobs)
 rv = stats.f(df, dn)
 ix = np.argsort(support)
 
+dens_diff = DiffusionKDE(support)
+dens_diff.fit()
 dens_normal = KDEMultivariate(data=[support], var_type='c', bw='normal_reference')
 dens_cvls = KDEMultivariate(data=[support], var_type='c', bw='cv_ls')
 dens_cvml = KDEMultivariate(data=[support], var_type='c', bw='cv_ml')
@@ -66,9 +71,11 @@ plt.plot(support[ix], rv.pdf(support[ix]), label='Actual')
 plt.plot(support[ix], dens_normal.pdf()[ix], label='Scott')
 plt.plot(support[ix], dens_cvls.pdf()[ix], label='CV_LS')
 plt.plot(support[ix], dens_cvml.pdf()[ix], label='CV_ML')
+plt.plot(dens_diff.support,dens_diff.density, label='Diffusion')
+
 plt.title("Nonparametric Estimation of the Density of f Distributed " \
           "Random Variable")
-plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML'))
+plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML','Diffusion'))
 
 # Pareto distribution
 a = 2
@@ -80,14 +87,17 @@ ix = np.argsort(support)
 dens_normal = KDEMultivariate(data=[support], var_type='c', bw='normal_reference')
 dens_cvls = KDEMultivariate(data=[support], var_type='c', bw='cv_ls')
 dens_cvml = KDEMultivariate(data=[support], var_type='c', bw='cv_ml')
+dens_diff = DiffusionKDE(support)
+dens_diff.fit()
 plt.figure(3)
 plt.plot(support[ix], rv.pdf(support[ix]), label='Actual')
 plt.plot(support[ix], dens_normal.pdf()[ix], label='Scott')
 plt.plot(support[ix], dens_cvls.pdf()[ix], label='CV_LS')
 plt.plot(support[ix], dens_cvml.pdf()[ix], label='CV_ML')
+plt.plot(dens_diff.support,dens_diff.density, label='Diffusion')
 plt.title("Nonparametric Estimation of the Density of Pareto " \
           "Distributed Random Variable")
-plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML'))
+plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML','Diffusion'))
 
 # Laplace Distribution
 mu = 0
@@ -101,15 +111,17 @@ ix = np.argsort(support)
 dens_normal = KDEMultivariate(data=[support], var_type='c', bw='normal_reference')
 dens_cvls = KDEMultivariate(data=[support], var_type='c', bw='cv_ls')
 dens_cvml = KDEMultivariate(data=[support], var_type='c', bw='cv_ml')
-
+dens_diff = DiffusionKDE(support)
+dens_diff.fit()
 plt.figure(4)
 plt.plot(support[ix], rv.pdf(support[ix]), label='Actual')
 plt.plot(support[ix], dens_normal.pdf()[ix], label='Scott')
 plt.plot(support[ix], dens_cvls.pdf()[ix], label='CV_LS')
 plt.plot(support[ix], dens_cvml.pdf()[ix], label='CV_ML')
+plt.plot(dens_diff.support,dens_diff.density, label='Diffusion')
 plt.title("Nonparametric Estimation of the Density of Laplace " \
           "Distributed Random Variable")
-plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML'))
+plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML','Diffusion'))
 
 # Weibull Distribution
 a = 1
@@ -122,15 +134,17 @@ ix = np.argsort(support)
 dens_normal = KDEMultivariate(data=[support], var_type='c', bw='normal_reference')
 dens_cvls = KDEMultivariate(data=[support], var_type='c', bw='cv_ls')
 dens_cvml = KDEMultivariate(data=[support], var_type='c', bw='cv_ml')
-
+dens_diff = DiffusionKDE(support)
+dens_diff.fit()
 plt.figure(5)
 plt.plot(support[ix], rv.pdf(support[ix]), label='Actual')
 plt.plot(support[ix], dens_normal.pdf()[ix], label='Scott')
 plt.plot(support[ix], dens_cvls.pdf()[ix], label='CV_LS')
 plt.plot(support[ix], dens_cvml.pdf()[ix], label='CV_ML')
+plt.plot(dens_diff.support,dens_diff.density, label='Diffusion')
 plt.title("Nonparametric Estimation of the Density of Weibull " \
           "Distributed Random Variable")
-plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML'))
+plt.legend(('Actual', 'Scott', 'CV_LS', 'CV_ML','Diffusion'))
 
 # Poisson Distribution
 a = 2

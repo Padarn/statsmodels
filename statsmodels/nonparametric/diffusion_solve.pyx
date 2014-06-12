@@ -99,7 +99,7 @@ def heat_equation_pilot(np.ndarray[DOUBLE] X_GRID,
     cdef:
         Py_ssize_t i
         int Nx = X_GRID.shape[0]
-        int Nt = np.ceil(time/dt)
+        int Nt = np.floor(time/dt)
         double dx = X_GRID[1]-X_GRID[0]
         double sigma = D*dt/(1.0*dx*dx)  # Check that 2 is correct
         double sigma_implicit = implicit_ratio * sigma
@@ -123,13 +123,11 @@ def heat_equation_pilot(np.ndarray[DOUBLE] X_GRID,
     diag = diag/PDF_PILOT
     diag = diag + np.ones(Nx, np.float64)
 
-    # do last two steps manually to keep non differenced results
+    # do last step manually to keep non differenced results
     for i in range(Nt-2):
         rhs = tridiagonal_solve(upperdiag,diag,lowerdiag,rhs)
         rhs = explicit_difference_neuman(rhs, PDF_PILOT, sigma_explicit)
 
-    # final steps with no differencing at end
-    sol0 = tridiagonal_solve(upperdiag,diag,lowerdiag,rhs)
-    rhs = explicit_difference_neuman(sol0, PDF_PILOT, sigma_explicit)
-    sol1 = tridiagonal_solve(upperdiag,diag,lowerdiag,rhs)
-    return sol0, sol1;
+    # final step with no differencing at end
+    sol = tridiagonal_solve(upperdiag,diag,lowerdiag,rhs)
+    return sol

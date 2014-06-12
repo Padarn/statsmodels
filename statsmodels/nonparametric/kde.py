@@ -25,7 +25,10 @@ from statsmodels.tools.decorators import (cache_readonly,
 from . import bandwidths
 from .kdetools import (forrt, revrt, silverman_transform, counts)
 from .linbin import fast_linbin
-
+from .diffusion_solve import heat_equation_pilot, explicit_difference_neuman
+import scipy as sci
+import scipy.optimize
+import scipy.fftpack
 #### Kernels Switch for estimators ####
 
 kernel_switch = dict(gau=kernels.Gaussian, epa=kernels.Epanechnikov,
@@ -88,7 +91,8 @@ class KDEUnivariate(object):
 
 
     def fit(self, kernel="gau", bw="scott", fft=True, weights=None,
-            gridsize=None, adjust=1, cut=3, clip=(-np.inf, np.inf)):
+            gridsize=None, adjust=1, cut=3, clip=(-np.inf, np.inf),
+            a=None, b=None):
         """
         Attach the density estimate to the KDEUnivariate class.
 
@@ -144,11 +148,11 @@ class KDEUnivariate(object):
                 raise NotImplementedError(msg)
             density, grid, bw = kdensityfft(endog, kernel=kernel, bw=bw,
                     adjust=adjust, weights=weights, gridsize=gridsize,
-                    clip=clip, cut=cut)
+                    clip=clip, cut=cut, a_in=a, b_in=b)
         else:
             density, grid, bw = kdensity(endog, kernel=kernel, bw=bw,
                     adjust=adjust, weights=weights, gridsize=gridsize,
-                    clip=clip, cut=cut)
+                    clip=clip, cut=cut, a_in=a, b_in=b)
         self.fft = fft
         self.density = density
         self.support = grid
@@ -532,7 +536,8 @@ class KDE(KDEUnivariate):
 #### Kernel Density Estimator Functions ####
 
 def kdensity(X, kernel="gau", bw="scott", weights=None, gridsize=None,
-             adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True):
+             adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True,
+             a_in = None, b_in = None):
     """
     Rosenblatt-Parzen univariate kernel density estimator.
 
@@ -615,6 +620,13 @@ def kdensity(X, kernel="gau", bw="scott", weights=None, gridsize=None,
     b = np.max(X,axis=0) + cut*bw
     grid = np.linspace(a, b, gridsize)
 
+    #####-------- HACK IN FOR NOW ------------
+    if (a_in is not None) and (b_in is not None) and (gridsize is not None):
+        grid = np.linspace(a_in,b_in,gridsize)
+        a = a_in
+        b = b_in
+    #####-------------------------------------
+
     k = (X.T - grid[:,None])/bw  # uses broadcasting to make a gridsize x nobs
 
     # instantiate kernel class
@@ -638,7 +650,8 @@ def kdensity(X, kernel="gau", bw="scott", weights=None, gridsize=None,
         return dens, bw
 
 def kdensityfft(X, kernel="gau", bw="scott", weights=None, gridsize=None,
-                adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True):
+                adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True,
+                a_in = None, b_in = None):
     """
     Rosenblatt-Parzen univariate kernel density estimator
 
@@ -727,6 +740,14 @@ def kdensityfft(X, kernel="gau", bw="scott", weights=None, gridsize=None,
     a = np.min(X)-cut*bw
     b = np.max(X)+cut*bw
     grid,delta = np.linspace(a,b,gridsize,retstep=True)
+
+    #####-------- HACK IN FOR NOW ------------
+    if (a_in is not None) and (b_in is not None) and (gridsize is not None):
+        grid = np.linspace(a_in,b_in,gridsize)
+        a = a_in
+        b = b_in
+    #####-------------------------------------
+
     RANGE = b-a
 
 #TODO: Fix this?
@@ -770,153 +791,78 @@ def kdensityfft(X, kernel="gau", bw="scott", weights=None, gridsize=None,
 
 class DiffusionKDE(KDEUnivariate):
 
+    """
+    Diffusion KDE WIP
+    """
 
-    def fit(self, kernel="gau", bw="scott", fft=True, weights=None,
-            gridsize=None, adjust=1, cut=3, clip=(-np.inf, np.inf)):
-        """
-        Attach the density estimate to the KDEUnivariate class.
+    def fit(self, gridsize=None, kernel="gau"):
 
-        Parameters
-        ----------
-        kernel : str
-            The Kernel to be used. Choices are:
-
-            - "biw" for biweight
-            - "cos" for cosine
-            - "epa" for Epanechnikov
-            - "gau" for Gaussian.
-            - "tri" for triangular
-            - "triw" for triweight
-            - "uni" for uniform
-
-        bw : str, float
-            The bandwidth to use. Choices are:
-
-            - "scott" - 1.059 * A * nobs ** (-1/5.), where A is
-              `min(std(X),IQR/1.34)`
-            - "silverman" - .9 * A * nobs ** (-1/5.), where A is
-              `min(std(X),IQR/1.34)`
-            - If a float is given, it is the bandwidth.
-
-        fft : bool
-            Whether or not to use FFT. FFT implementation is more
-            computationally efficient. However, only the Gaussian kernel
-            is implemented. If FFT is False, then a 'nobs' x 'gridsize'
-            intermediate array is created.
-        gridsize : int
-            If gridsize is None, max(len(X), 512) is used.
-        cut : float
-            Defines the length of the grid past the lowest and highest values
-            of X so that the kernel goes to zero. The end points are
-            -/+ cut*bw*{min(X) or max(X)}
-        adjust : float
-            An adjustment factor for the bw. Bandwidth becomes bw * adjust.
-        """
-        try:
-            bw = float(bw)
-            self.bw_method = "user-given"
-        except:
-            self.bw_method = bw
-        endog = self.endog
-
-        if fft:
-            if kernel != "gau":
-                msg = "Only gaussian kernel is available for fft"
-                raise NotImplementedError(msg)
-            if weights is not None:
-                msg = "Weights are not implemented for fft"
-                raise NotImplementedError(msg)
-            density, grid, bw, bw2 = kdensitydiffusion(endog, kernel=kernel, bw=bw,
-                    adjust=adjust, weights=weights, gridsize=gridsize,
-                    clip=clip, cut=cut)
-        else:
-            density, grid, bw = kdensity(endog, kernel=kernel, bw=bw,
-                    adjust=adjust, weights=weights, gridsize=gridsize,
-                    clip=clip, cut=cut)
-        self.fft = fft
+        density, grid, bw = kdensitydiffusion(self.endog, gridsize=gridsize)
+       
         self.density = density
         self.support = grid
         self.bw = bw
-        self.bw2 = bw2
         self.kernel = kernel_switch[kernel](h=bw) # we instantiate twice,
                                                 # should this passed to funcs?
-
 
         # put here to ensure empty cache after re-fit with new options
         self._cache = resettable_cache()
 
         return self 
 
-def kdensitydiffusion(X, kernel="gau", bw="scott", weights=None, gridsize=None,
-                adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True):
-    
-    X = np.asarray(X)
-    X = X[np.logical_and(X>clip[0], X<clip[1])] # won't work for two columns.
-                                                # will affect underlying data?
-    data = X
-    nobs = len(X)
+def fixedptbw(X, retbinned = True, gridsize = None):
+
+    """
+    Returns fixed point bw estimate for both kde
+    and kde derivative.
+
+    If retbinned is true, also returns the binned
+    data
+    """
+
+    # get grid
+
+    Nobs = len(X)
     if gridsize == None:
-        gridsize = np.max((nobs,512.))
+        gridsize = np.max((Nobs,512.))
     gridsize = 2**np.ceil(np.log2(gridsize))
-    N = np.int(gridsize)
+    Ngrid = np.int(gridsize)
 
-    ###---------------------------------------------
-    import scipy as sci
-    import scipy.optimize
-    import scipy.fftpack
-    MIN = None
-    MAX = None
+    
+    xmin = np.min(X) - 1.0/5*(np.max(X)-np.min(X))
+    xmax = np.max(X) + 1.0/5*(np.max(X)-np.min(X))
+    rangex = xmax-xmin
 
-    if MIN is None or MAX is None:
-        minimum = min(data)
-        maximum = max(data)
-        Range = maximum - minimum
-        MIN = minimum - Range/5 if MIN is None else MIN
-        MAX = maximum + Range/5 if MAX is None else MAX
+    grid = np.linspace(xmin,xmax,Ngrid)
+    dx = grid[1]-grid[0]
+    bins = np.linspace(xmin-dx/2,xmax+dx/2,Ngrid+1)
 
-    # Range of the data
-    R = MAX-MIN
+    # Histogram the data and take dct
+    binned, _ = sci.histogram(X, bins=bins)
+    binned = binned/Nobs
+    binned_star = scipy.fftpack.dct(binned, norm=None)
 
-    # Histogram the data to get a crude first approximation of the density
-    M = len(data)
-    DataHist, bins = sci.histogram(data, bins=N, range=(MIN,MAX))
-    DataHist = DataHist/M
-    DCTData = scipy.fftpack.dct(DataHist, norm=None)
+    # Set up ranges for fixed point calculation
+    I = [iN*iN for iN in xrange(1, Ngrid)]
+    SqDCTData = (binned_star[1:]/2)**2
 
-    I = [iN*iN for iN in xrange(1, N)]
-    SqDCTData = (DCTData[1:]/2)**2
-
-    # The fixed point calculation finds the bandwidth = t_star
+    # Fixed point calculation
     guess = 0.1
     try:
         t_star = scipy.optimize.brentq(fixed_point, 0, guess,
-                                       args=(M, I, SqDCTData))
+                                       args=(Nobs, I, SqDCTData))
+        t_star_dx = fixed_point(t_star,Nobs,I,SqDCTData,True)     
     except ValueError:
-        print 'Oops!'
-        return None
+        t_star = guess
+        t_start_dx = t_star
 
-    t_star2 = fixed_point(t_star,M,I,SqDCTData,True)
-
-    # Smooth the DCTransformed data using t_star
-    SmDCTData = DCTData*sci.exp(-sci.arange(N)**2*sci.pi**2*t_star/2)
-    # Inverse DCT to get density
-    density = scipy.fftpack.idct(SmDCTData, norm=None)*N/R
-    mesh = [(bins[i]+bins[i+1])/2 for i in xrange(N)]
-    bandwidth = sci.sqrt(t_star)*R
-    bandwidth2 = sci.sqrt(t_star2)*R
+    bw = sci.sqrt(t_star)*rangex
+    bw_dx = sci.sqrt(t_star_dx)*rangex
     
-    density = density/sci.trapz(density, mesh)
-    
-    f = np.array(density)
-    bw = bandwidth
-    grid = np.array(mesh)
-
-    ###---------------------------------------------
-
-    if retgrid:
-        return f, grid, bw, bandwidth2
+    if retbinned:
+        return bw, bw_dx, binned, grid
     else:
-        return f, bw
+        return bw, bw_dx
 
 def fixed_point(t, M, I, a2, t2 = False):
     import scipy as sci
@@ -938,6 +884,55 @@ def fixed_point(t, M, I, a2, t2 = False):
     else:
         return t-(2*M*sci.sqrt(sci.pi)*f)**(-2/5)
 
+def kdensitydiffusion(X, gridsize=None, retgrid=True, implicit_ratio=1,
+                      Nt = 1000):
+
+    """
+    Calculates diffusion KDE in two step process
+    """
+    
+    X = np.asarray(X)
+    N = len(X)
+    D = 0.5
+
+
+    ### STEP 1 - CALCULATE PILOT AND OPT BW
+
+    bw, dx_bw, binned, grid = fixedptbw(X)
+    pilot = KDEUnivariate(X)
+    pilot.fit(bw=bw,a=np.min(grid),b=np.max(grid),gridsize=len(grid))
+    pilotpdf = pilot.density
+
+    ### STEP 2 - ESTIMATE OPTIMAL DIFFUSION TIME
+    
+    # calculate density at t-1 and t to estiamte dt
+    t = np.sqrt(dx_bw)
+    dt = t/Nt
+    dx = grid[1]-grid[0]
+    sigma_explicit = D*dt/(dx**2)
+    binned = binned/sum(binned*dx)   
+    density = heat_equation_pilot(grid,binned,pilotpdf,t,dt,implicit_ratio,D)
+    density_dx2 = explicit_difference_neuman(density,pilotpdf,sigma_explicit)
+    densityp1 = heat_equation_pilot(grid,density,pilotpdf,dt,dt,implicit_ratio,D)
+    densityp1_dx2 = explicit_difference_neuman(densityp1,pilotpdf,sigma_explicit)
+
+    # estimate tstar
+    dx = grid[1]-grid[0]
+    dt2norm = np.sum(dx/(dt**2)*(densityp1_dx2-density_dx2)**2)
+    siginv = np.mean(np.sqrt(pilot.evaluate(X)))
+    t_star = (siginv/(2*len(X)*np.sqrt(np.pi)*dt2norm))**(2.0/5.0)
+
+    ### STEP 3 - ESTIMATE FINAL DIFFUSION KDE
+    dt = t_star/Nt
+    density = heat_equation_pilot(grid,binned,pilotpdf,t_star,dt,implicit_ratio,D)
+    bw = t_star**2
+
+
+
+    if retgrid:
+        return density, grid, bw
+    else:
+        return density, bw
 
 
 if __name__ == "__main__":
