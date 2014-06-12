@@ -89,7 +89,7 @@ def diffsol_noadvec(x_grid, yinitial,pdf,t, samp, siginv):
     dx = x_grid[1]-x_grid[0]
 
     T = t
-    N = 1000
+    N = 100
     dt = float(T)/float(N-1)
     t_grid = numpy.array([n*dt for n in range(N)])
 
@@ -97,25 +97,31 @@ def diffsol_noadvec(x_grid, yinitial,pdf,t, samp, siginv):
     epsilon = 0
     
     sigma_u = float(D_u*dt)/float(2.*dx*dx)
+    print 'dx',dx
 
 
+    alpha = 1
+    sigma_b = float(D_u*dt)/float(1.*dx*dx) * (1-alpha)
+    sigma_a = float(D_u*dt)/float(1.*dx*dx) * alpha
+
+    print 'sigma',sigma_a
     U = yinitial
 
-    A1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
-          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
-          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+    A1 =  numpy.diagflat([-1 for i in range(J-1)], -1) +\
+          numpy.diagflat([1]+[2.*1 for i in range(J-2)]+[1]) +\
+          numpy.diagflat([-(1) for i in range(J-1)], 1)
 
     A3 =  numpy.eye(A1.shape[0])
 
-    A_u = A1*1.0/pdf+A3
+    A_u = sigma_a*A1*1.0/pdf+A3
 
-    B1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
-          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
-          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+    B1 =  numpy.diagflat([-1 for i in range(J-1)], -1) +\
+          numpy.diagflat([1]+[2.*1 for i in range(J-2)]+[1]) +\
+          numpy.diagflat([-(1) for i in range(J-1)], 1)
 
     B3 =  numpy.eye(A1.shape[0])
 
-    B_u =  -B1*1.0/pdf+B3
+    B_u =  -sigma_b*B1*1.0/pdf+B3
 
     U_record = []
 
@@ -162,34 +168,34 @@ def diffsol_noadvec(x_grid, yinitial,pdf,t, samp, siginv):
     J = len(x_grid)
     dx = x_grid[1]-x_grid[0]
 
-    T = 0.03
-    N = 1000
+    T = tstar
+    N = 100
     dt = float(T)/float(N-1)
     t_grid = numpy.array([n*dt for n in range(N)])
 
     D_u = 0.5
     epsilon = 0
     
-    sigma_u = float(D_u*dt)/float(2.*dx*dx)
-
+    sigma_b = float(D_u*dt)/float(1.*dx*dx) * (1-alpha)
+    sigma_a = float(D_u*dt)/float(1.*dx*dx) * alpha
 
     U = yinitial
 
-    A1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
-          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
-          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+    A1 =  numpy.diagflat([-1 for i in range(J-1)], -1) +\
+          numpy.diagflat([1]+[2.*1 for i in range(J-2)]+[1]) +\
+          numpy.diagflat([-(1) for i in range(J-1)], 1)
 
     A3 =  numpy.eye(A1.shape[0])
 
-    A_u = A1*1.0/pdf+A3
+    A_u = sigma_a*A1*1.0/pdf+A3
 
-    B1 =  numpy.diagflat([-sigma_u for i in range(J-1)], -1) +\
-          numpy.diagflat([sigma_u]+[2.*sigma_u for i in range(J-2)]+[sigma_u]) +\
-          numpy.diagflat([-(sigma_u) for i in range(J-1)], 1)
+    B1 =  numpy.diagflat([-1 for i in range(J-1)], -1) +\
+          numpy.diagflat([1]+[2.*1 for i in range(J-2)]+[1]) +\
+          numpy.diagflat([-(1) for i in range(J-1)], 1)
 
     B3 =  numpy.eye(A1.shape[0])
 
-    B_u =  -B1*1.0/pdf+B3
+    B_u =  -sigma_b*B1*1.0/pdf+B3
 
     U_record = []
 
@@ -206,10 +212,7 @@ def diffsol_noadvec(x_grid, yinitial,pdf,t, samp, siginv):
 
     fig, ax = pyplot.subplots()
     
-   
-    ax.plot(x_grid,pdf, linewidth=2, label= 'regular kde')
-    ax.plot(x_grid,U_first, linewidth=2,label='diffusion kde bw' )
-    ax.plot(x_grid,U, linewidth =2, label='diffusion custom bw')
+    ax.plot(x_grid,U, linewidth =2, label='diffusion kde')
 
     print 't',t,'tstar',tstar
 

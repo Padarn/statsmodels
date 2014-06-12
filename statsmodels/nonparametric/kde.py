@@ -12,6 +12,7 @@ http://en.wikipedia.org/wiki/Kernel_%28statistics%29
 Silverman, B.W.  Density Estimation for Statistics and Data Analysis.
 """
 from __future__ import absolute_import
+from __future__ import division
 # for 2to3 with extensions
 import warnings
 
@@ -767,91 +768,175 @@ def kdensityfft(X, kernel="gau", bw="scott", weights=None, gridsize=None,
     else:
         return f, bw
 
-def fixed_point():
-    pass
+class DiffusionKDE(KDEUnivariate):
 
-class DiffusionKDE(object):
 
-    def __init__(self, endog):
-        self.endog = np.asarray(endog)
-        self.min = np.min(endog)
-        self.max = np.max(endog)
-        self.range = self.max - self.min
-        self.min -= self.range / 10
-        self.max += self.range / 10
-        self.range = self.max - self.min
-    
-    def fit(self):
+    def fit(self, kernel="gau", bw="scott", fft=True, weights=None,
+            gridsize=None, adjust=1, cut=3, clip=(-np.inf, np.inf)):
+        """
+        Attach the density estimate to the KDEUnivariate class.
 
-        # set up support grid
-        if not hasattr(self, 'support'):
-            gridsize = np.max([512, len(self.endog)])
-            self.gridsize = np.int(2 ** np.ceil(np.log2(gridsize)))
-            self.support = np.linspace(self.min, self.max, self.gridsize)
+        Parameters
+        ----------
+        kernel : str
+            The Kernel to be used. Choices are:
 
-        n = self.gridsize
+            - "biw" for biweight
+            - "cos" for cosine
+            - "epa" for Epanechnikov
+            - "gau" for Gaussian.
+            - "tri" for triangular
+            - "triw" for triweight
+            - "uni" for uniform
 
-        dx = self.support[1] - self.support[0]  #assume uniform
-        nobs = len(self.endog)
+        bw : str, float
+            The bandwidth to use. Choices are:
 
-        initial_data = fast_linbin(self.endog, self.min, self.max, self.gridsize)
-        initial_data = initial_data/sum(initial_data)
+            - "scott" - 1.059 * A * nobs ** (-1/5.), where A is
+              `min(std(X),IQR/1.34)`
+            - "silverman" - .9 * A * nobs ** (-1/5.), where A is
+              `min(std(X),IQR/1.34)`
+            - If a float is given, it is the bandwidth.
 
-        a = fftpack.dct(initial_data)
+        fft : bool
+            Whether or not to use FFT. FFT implementation is more
+            computationally efficient. However, only the Gaussian kernel
+            is implemented. If FFT is False, then a 'nobs' x 'gridsize'
+            intermediate array is created.
+        gridsize : int
+            If gridsize is None, max(len(X), 512) is used.
+        cut : float
+            Defines the length of the grid past the lowest and highest values
+            of X so that the kernel goes to zero. The end points are
+            -/+ cut*bw*{min(X) or max(X)}
+        adjust : float
+            An adjustment factor for the bw. Bandwidth becomes bw * adjust.
+        """
+        try:
+            bw = float(bw)
+            self.bw_method = "user-given"
+        except:
+            self.bw_method = bw
+        endog = self.endog
 
-        # calculate bandwidth
-        grid = self.support
-        DCTData = a
-
-        M = len(self.endog)
-        N = n
-
-        # Histogram the data to get a crude first approximation of the density
-        MIN = self.min
-        MAX = self.max
-        M = len(self.endog)
-        DataHist, bins = sp.histogram(self.endog, bins=N, range=(MIN,MAX))
-        DataHist = DataHist/(1.0*M)
-        DCTData = sp.fftpack.dct(1.0*DataHist, norm=None)
-
-        I = [iN*iN for iN in xrange(1, N)]
-        SqDCTData = (DCTData[1:]/2)**2
-
-        # The fixed point calculation finds the bandwidth = t_star
-        # guess = 1
-        # try:
-        #     t_star = sp.optimize.brentq(fixed_point, 0, guess, 
-        #                                args=(M, I, SqDCTData))
-        # except ValueError as e:
-        #     raise e
-
-        t_star = .28*M**(-2/5)
-
-        # Smooth the DCTransformed data using t_star
-        SmDCTData = DCTData*np.exp(-np.arange(N)**2*np.pi**2*t_star/2)
-        # Inverse DCT to get density
-        density = fftpack.idct(SmDCTData, norm=None)*N/self.range
-        mesh = [(bins[i]+bins[i+1])/2 for i in np.arange(N)]
-        bandwidth = np.sqrt(t_star)*self.range
-        
-        density = density/sp.trapz(density, mesh)
+        if fft:
+            if kernel != "gau":
+                msg = "Only gaussian kernel is available for fft"
+                raise NotImplementedError(msg)
+            if weights is not None:
+                msg = "Weights are not implemented for fft"
+                raise NotImplementedError(msg)
+            density, grid, bw, bw2 = kdensitydiffusion(endog, kernel=kernel, bw=bw,
+                    adjust=adjust, weights=weights, gridsize=gridsize,
+                    clip=clip, cut=cut)
+        else:
+            density, grid, bw = kdensity(endog, kernel=kernel, bw=bw,
+                    adjust=adjust, weights=weights, gridsize=gridsize,
+                    clip=clip, cut=cut)
+        self.fft = fft
         self.density = density
-        self.bw = bandwidth
-        #return bandwidth, mesh, density
+        self.support = grid
+        self.bw = bw
+        self.bw2 = bw2
+        self.kernel = kernel_switch[kernel](h=bw) # we instantiate twice,
+                                                # should this passed to funcs?
 
-def fixed_point(t, M, I, a2):
+
+        # put here to ensure empty cache after re-fit with new options
+        self._cache = resettable_cache()
+
+        return self 
+
+def kdensitydiffusion(X, kernel="gau", bw="scott", weights=None, gridsize=None,
+                adjust=1, clip=(-np.inf,np.inf), cut=3, retgrid=True):
+    
+    X = np.asarray(X)
+    X = X[np.logical_and(X>clip[0], X<clip[1])] # won't work for two columns.
+                                                # will affect underlying data?
+    data = X
+    nobs = len(X)
+    if gridsize == None:
+        gridsize = np.max((nobs,512.))
+    gridsize = 2**np.ceil(np.log2(gridsize))
+    N = np.int(gridsize)
+
+    ###---------------------------------------------
+    import scipy as sci
+    import scipy.optimize
+    import scipy.fftpack
+    MIN = None
+    MAX = None
+
+    if MIN is None or MAX is None:
+        minimum = min(data)
+        maximum = max(data)
+        Range = maximum - minimum
+        MIN = minimum - Range/5 if MIN is None else MIN
+        MAX = maximum + Range/5 if MAX is None else MAX
+
+    # Range of the data
+    R = MAX-MIN
+
+    # Histogram the data to get a crude first approximation of the density
+    M = len(data)
+    DataHist, bins = sci.histogram(data, bins=N, range=(MIN,MAX))
+    DataHist = DataHist/M
+    DCTData = scipy.fftpack.dct(DataHist, norm=None)
+
+    I = [iN*iN for iN in xrange(1, N)]
+    SqDCTData = (DCTData[1:]/2)**2
+
+    # The fixed point calculation finds the bandwidth = t_star
+    guess = 0.1
+    try:
+        t_star = scipy.optimize.brentq(fixed_point, 0, guess,
+                                       args=(M, I, SqDCTData))
+    except ValueError:
+        print 'Oops!'
+        return None
+
+    t_star2 = fixed_point(t_star,M,I,SqDCTData,True)
+
+    # Smooth the DCTransformed data using t_star
+    SmDCTData = DCTData*sci.exp(-sci.arange(N)**2*sci.pi**2*t_star/2)
+    # Inverse DCT to get density
+    density = scipy.fftpack.idct(SmDCTData, norm=None)*N/R
+    mesh = [(bins[i]+bins[i+1])/2 for i in xrange(N)]
+    bandwidth = sci.sqrt(t_star)*R
+    bandwidth2 = sci.sqrt(t_star2)*R
+    
+    density = density/sci.trapz(density, mesh)
+    
+    f = np.array(density)
+    bw = bandwidth
+    grid = np.array(mesh)
+
+    ###---------------------------------------------
+
+    if retgrid:
+        return f, grid, bw, bandwidth2
+    else:
+        return f, bw
+
+def fixed_point(t, M, I, a2, t2 = False):
+    import scipy as sci
+    import scipy.optimize
+    import scipy.fftpack
+    
     l=7
-    I = sp.float128(I)
-    M = sp.float128(M)
-    a2 = sp.float128(a2)
-    f = 2*sp.pi**(2*l)*sp.sum(I**l*a2*sp.exp(-I*sp.pi**2*t))
+    I = sci.float128(I)
+    M = sci.float128(M)
+    a2 = sci.float128(a2)
+    f = 2*sci.pi**(2*l)*sci.sum(I**l*a2*sci.exp(-I*sci.pi**2*t))
     for s in range(l, 1, -1):
-        K0 = sp.prod(np.arange(1, 2*s, 2))/sp.sqrt(2*sp.pi)
+        K0 = sci.prod(xrange(1, 2*s, 2))/sci.sqrt(2*sci.pi)
         const = (1 + (1/2)**(s + 1/2))/3
         time=(2*const*K0/M/f)**(2/(3+2*s))
-        f=2*sp.pi**(2*s)*sp.sum(I**s*a2*sp.exp(-I*sp.pi**2*time))
-    return t-(2*M*sp.sqrt(sp.pi)*f)**(-2/5)
-
+        f=2*sci.pi**(2*s)*sci.sum(I**s*a2*sci.exp(-I*sci.pi**2*time))
+    if t2:
+        return time
+    else:
+        return t-(2*M*sci.sqrt(sci.pi)*f)**(-2/5)
 
 
 
